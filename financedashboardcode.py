@@ -22,21 +22,31 @@ def extract_key_numbers_from_pdf(file):
         # Define regex patterns for financial data
         money_in_pattern = r"(?i)(?:money in|income|revenue|credits):?\s*\$?([\d,]+\.?\d*)"
         money_out_pattern = r"(?i)(?:money out|expenses|debits):?\s*\$?([\d,]+\.?\d*)"
-        what_received_pattern = r"(?i)(?:what I received|received|proceeds):?\s*\$?([\d,]+\.?\d*)"
+        what_received_pattern = r"(?i)(?:what you received|received|proceeds):?\s*\$?([\d,]+\.?\d*)"
         date_pattern = r"\b(\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4})\b"
         
-        # Search for patterns
-        money_in_matches = re.findall(money_in_pattern, full_text)
-        money_out_matches = re.findall(money_out_pattern, full_text)
-        what_received_matches = re.findall(what_received_pattern, full_text)
-        date_matches = re.findall(date_pattern, full_text)
+        # Helper function to clean matches
+        def clean_matches(matches):
+            return [
+                float(match.replace(',', ''))
+                for match in matches if match and re.match(r"^\d+(\.\d+)?$", match.replace(',', ''))
+            ]
+        
+        # Search for patterns and clean results
+        money_in = clean_matches(re.findall(money_in_pattern, full_text))
+        money_out = clean_matches(re.findall(money_out_pattern, full_text))
+        what_received = clean_matches(re.findall(what_received_pattern, full_text))
+        if not what_received:
+            what_received = [0.0]
+        
+        # Handle missing or invalid dates
+        formatted_date = date_matches[0] if (date_matches := re.findall(date_pattern, full_text)) else "Unknown Date"
+        if formatted_date != "Unknown Date":
+            date_object = datetime.strptime(formatted_date, "%d %b %Y")
+            new_date = date_object.strftime("%d/%m/%Y")
+        else:
+            new_date = "N/A"
 
-        # Convert matches to floats where applicable
-        money_in = [float(match.replace(',', '')) for match in money_in_matches]
-        money_out = [float(match.replace(',', '')) for match in money_out_matches]
-        what_received = [float(match.replace(',', '')) for match in what_received_matches]
-
-        # Create a summary
         # Display summary in a structured layout
         pol1, pol2, pol3, pol4 = st.columns(4)
         with pol1:
@@ -44,17 +54,11 @@ def extract_key_numbers_from_pdf(file):
         with pol2:
             st.metric("Money Out", f"${sum(money_out):,.2f}")
         with pol3:
-            st.metric("Net Recieved", f"${sum(what_received):,.2f}")
+            st.metric("Net Received", f"${sum(what_received):,.2f}")
         with pol4:
-            formatted_date = date_matches[0]
-            date_object = datetime.strptime(formatted_date, "%d %b %Y")
-
-            # Format the datetime object into the desired format
-            new_date = date_object.strftime("%d/%m/%Y")
-
             st.metric("On Date", str(new_date))
     except Exception as e:
-        return None
+        st.error(f"An error occurred: {str(e)}")
 
 # Streamlit app
 st.title("Financial Dashboard")
